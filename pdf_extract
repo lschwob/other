@@ -1,0 +1,57 @@
+import fitz  # PyMuPDF
+import os
+
+# === Config ===
+pdf_path = "document.pdf"
+output_dir = "extraction_pdf"
+image_min_width = 100
+image_min_height = 100
+
+os.makedirs(output_dir, exist_ok=True)
+images_dir = os.path.join(output_dir, "images")
+rendered_pages_dir = os.path.join(output_dir, "pages_rendues")
+os.makedirs(images_dir, exist_ok=True)
+os.makedirs(rendered_pages_dir, exist_ok=True)
+
+# === Ouvrir le PDF ===
+doc = fitz.open(pdf_path)
+
+# === Fichier pour le texte extrait ===
+text_output_path = os.path.join(output_dir, "texte_extrait.txt")
+with open(text_output_path, "w", encoding="utf-8") as text_file:
+
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        texte = page.get_text().strip()
+
+        if texte:
+            text_file.write(f"--- Page {page_num + 1} ---\n")
+            text_file.write(texte + "\n\n")
+
+        else:
+            # Page sans texte → conversion en image (ex: page scannée)
+            pix = page.get_pixmap(dpi=300)  # résolution élevée
+            image_path = os.path.join(rendered_pages_dir, f"page_{page_num + 1}.png")
+            pix.save(image_path)
+            print(f"📸 Page {page_num + 1} convertie en image (pas de texte)")
+
+        # === Extraire images assez grandes ===
+        images = page.get_images(full=True)
+        for img_index, img in enumerate(images):
+            xref = img[0]
+            base_image = doc.extract_image(xref)
+            image_bytes = base_image["image"]
+            image_ext = base_image["ext"]
+            width = base_image.get("width", 0)
+            height = base_image.get("height", 0)
+
+            if width >= image_min_width and height >= image_min_height:
+                image_filename = f"page{page_num+1}_img{img_index+1}.{image_ext}"
+                image_path = os.path.join(images_dir, image_filename)
+                with open(image_path, "wb") as f:
+                    f.write(image_bytes)
+                print(f"🖼️ Image extraite : {image_filename} ({width}x{height})")
+            else:
+                print(f"⚠️ Image ignorée : {width}x{height} trop petite")
+
+print(f"\n✅ Extraction terminée. Texte, images et pages scannées enregistrés dans : {output_dir}")

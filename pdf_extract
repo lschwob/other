@@ -7,11 +7,11 @@ output_dir = "extraction_pdf"
 image_min_width = 100
 image_min_height = 100
 
-ios.makedirs(output_dir, exist_ok=True)
+os.makedirs(output_dir, exist_ok=True)
 images_dir = os.path.join(output_dir, "images")
 rendered_pages_dir = os.path.join(output_dir, "pages_rendues")
-os.makedirs(images_dir, exist_ok=True)
-os.makedirs(rendered_pages_dir, exist_ok=True)
+for d in (images_dir, rendered_pages_dir):
+    os.makedirs(d, exist_ok=True)
 
 # === Ouvrir le PDF ===
 doc = fitz.open(pdf_path)
@@ -25,33 +25,37 @@ with open(text_output_path, "w", encoding="utf-8") as text_file:
 
         if not texte:
             # Page sans texte → conversion en image complète
-            pix = page.get_pixmap(dpi=300)  # résolution élevée
-            image_path = os.path.join(rendered_pages_dir, f"page_{page_num + 1}.png")
-            pix.save(image_path)
-            print(f"📸 Page {page_num + 1} convertie en image (pas de texte)")
-            continue  # ne pas extraire d'images séparées pour cette page
+            pix = page.get_pixmap(dpi=300)
+            path = os.path.join(rendered_pages_dir, f"page_{page_num+1}.png")
+            pix.save(path)
+            print(f"📸 Page {page_num+1} convertie en image (pas de texte)")
+            continue
 
         # Page avec texte → écrire le texte
-        text_file.write(f"--- Page {page_num + 1} ---\n")
+        text_file.write(f"--- Page {page_num+1} ---\n")
         text_file.write(texte + "\n\n")
 
-        # Extraire images intégrées assez grandes
-        images = page.get_images(full=True)
-        for img_index, img in enumerate(images):
+        # Extraire images intégrées assez grandes sans doublons
+        seen_xrefs = set()
+        for img in page.get_images(full=True):
             xref = img[0]
+            if xref in seen_xrefs:
+                continue
+            seen_xrefs.add(xref)
+
             base_image = doc.extract_image(xref)
             width = base_image.get("width", 0)
             height = base_image.get("height", 0)
 
             if width >= image_min_width and height >= image_min_height:
                 image_bytes = base_image["image"]
-                image_ext = base_image["ext"]
-                image_filename = f"page{page_num+1}_img{img_index+1}.{image_ext}"
-                image_path = os.path.join(images_dir, image_filename)
-                with open(image_path, "wb") as f:
-                    f.write(image_bytes)
-                print(f"🖼️ Image extraite : {image_filename} ({width}x{height})")
+                ext = base_image["ext"]
+                filename = f"page{page_num+1}_img{xref}.{ext}"
+                path = os.path.join(images_dir, filename)
+                with open(path, "wb") as img_file:
+                    img_file.write(image_bytes)
+                print(f"🖼️ Image extraite : {filename} ({width}x{height})")
             else:
                 print(f"⚠️ Image ignorée : {width}x{height} trop petite")
 
-print(f"\n✅ Extraction terminée. Texte, images et pages scannées enregistrés dans : {output_dir}")
+print(f"\n✅ Extraction terminée. Fichiers dans : {output_dir}")
